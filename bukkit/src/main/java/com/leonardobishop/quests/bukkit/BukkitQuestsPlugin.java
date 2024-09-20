@@ -62,6 +62,7 @@ import com.leonardobishop.quests.bukkit.scheduler.folia.FoliaServerScheduler;
 import com.leonardobishop.quests.bukkit.storage.MySqlStorageProvider;
 import com.leonardobishop.quests.bukkit.storage.YamlStorageProvider;
 import com.leonardobishop.quests.bukkit.tasktype.BukkitTaskTypeManager;
+import com.leonardobishop.quests.bukkit.tasktype.type.BarteringTaskType;
 import com.leonardobishop.quests.bukkit.tasktype.type.BlockItemdroppingTaskType;
 import com.leonardobishop.quests.bukkit.tasktype.type.BlockshearingTaskType;
 import com.leonardobishop.quests.bukkit.tasktype.type.BreedingTaskType;
@@ -459,6 +460,7 @@ public class BukkitQuestsPlugin extends JavaPlugin implements Quests {
             taskTypeManager.registerTaskType(new WalkingTaskType(this));
 
             // Register task types with class/method compatibility requirement
+            taskTypeManager.registerTaskType(() -> new BarteringTaskType(this), () -> CompatUtils.classExists("org.bukkit.event.entity.PiglinBarterEvent"));
             taskTypeManager.registerTaskType(() -> new BlockItemdroppingTaskType(this), () -> CompatUtils.classExists("org.bukkit.event.block.BlockDropItemEvent"));
             taskTypeManager.registerTaskType(() -> new BlockshearingTaskType(this), () -> CompatUtils.classExists("io.papermc.paper.event.block.PlayerShearBlockEvent"));
             taskTypeManager.registerTaskType(() -> new BrewingTaskType(this), () -> CompatUtils.classWithMethodExists("org.bukkit.event.inventory.BrewEvent", "getResults"));
@@ -475,6 +477,7 @@ public class BukkitQuestsPlugin extends JavaPlugin implements Quests {
 
             // Register task types with enabled plugin compatibility requirement
             taskTypeManager.registerTaskType(() -> new ASkyBlockLevelTaskType(this), () -> CompatUtils.isPluginEnabled("ASkyBlock"));
+            taskTypeManager.registerTaskType(() -> new BentoBoxLevelTaskType(this), () -> CompatUtils.isPluginEnabled("BentoBox") && CompatUtils.classExists("world.bentobox.level.events.IslandLevelCalculatedEvent"));
             taskTypeManager.registerTaskType(() -> new CitizensDeliverTaskType(this), () -> CompatUtils.isPluginEnabled("Citizens"));
             taskTypeManager.registerTaskType(() -> new CitizensInteractTaskType(this), () -> CompatUtils.isPluginEnabled("Citizens"));
             taskTypeManager.registerTaskType(() -> new CustomFishingFishingTaskType(this), () -> CompatUtils.isPluginEnabled("CustomFishing"));
@@ -508,11 +511,6 @@ public class BukkitQuestsPlugin extends JavaPlugin implements Quests {
                 String pluginVersion = CompatUtils.getPluginVersion("MythicMobs");
                 return pluginVersion != null && (pluginVersion.startsWith("4") || pluginVersion.startsWith("5"));
             });
-
-            // Register task types with even more weird requirements
-            if (CompatUtils.isPluginEnabled("BentoBox")) {
-                BentoBoxLevelTaskType.register(this, taskTypeManager);
-            }
 
             // Close task type registrations
             taskTypeManager.closeRegistrations();
@@ -644,16 +642,36 @@ public class BukkitQuestsPlugin extends JavaPlugin implements Quests {
         }
     }
 
-    public QuestItem getConfiguredQuestItem(String path, ConfigurationSection config, ItemGetter.Filter... excludes) {
-        if (config.contains(path + ".quest-item")) {
-            return questItemRegistry.getItem(config.getString(path + ".quest-item"));
+    public @NotNull QuestItem getConfiguredQuestItem(final @NotNull String path, final @NotNull ConfigurationSection config, final @NotNull ItemGetter.Filter @NotNull ... excludes) {
+        final String questItemId = config.getString(path + ".quest-item");
+
+        if (questItemId != null) {
+            final QuestItem questItem = this.questItemRegistry.getItem(questItemId);
+
+            if (questItem != null) {
+                return questItem;
+            }
         }
 
-        return new ParsedQuestItem("defined", null, getConfiguredItemStack(path, config, excludes));
+        return new ParsedQuestItem("defined", null, this.getItemStack(path, config, excludes));
     }
 
-    public ItemStack getConfiguredItemStack(String path, ConfigurationSection config, ItemGetter.Filter... excludes) {
-        return itemGetter.getItem(path, config, excludes);
+    public @NotNull ItemStack getConfiguredItemStack(final @NotNull String path, final @NotNull ConfigurationSection config, final @NotNull ItemGetter.Filter @NotNull ... excludes) {
+        final String questItemId = config.getString(path + ".quest-item");
+
+        if (questItemId != null) {
+            final QuestItem questItem = this.questItemRegistry.getItem(questItemId);
+
+            if (questItem != null) {
+                return questItem.getItemStack();
+            }
+        }
+
+        return this.itemGetter.getItem(path, config, excludes);
+    }
+
+    public @NotNull ItemStack getItemStack(final @NotNull String path, final @NotNull ConfigurationSection config, final @NotNull ItemGetter.Filter @NotNull ... excludes) {
+        return this.itemGetter.getItem(path, config, excludes);
     }
 
     private boolean reloadBaseConfiguration(final boolean initialLoad) {
